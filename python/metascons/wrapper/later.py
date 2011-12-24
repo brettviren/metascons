@@ -4,7 +4,7 @@ A wrapper package for the 'later' package
 '''
 
 import os
-from ext.wrapper import Wrapper
+from metascons.wrapper import Wrapper
 
 class Later(Wrapper):
     '''

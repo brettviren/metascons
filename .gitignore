@@ -1,3 +1,6 @@
 *~
 *.pyc
 *.dblite
+build_area
+install_area
+tar_files

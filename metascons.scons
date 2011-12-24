@@ -8,7 +8,7 @@
 
 import os
 import ConfigParser
-from ext.util import guess_platform
+from metascons.util import guess_platform
 
 AddOption('--build-config',default=None,
           help='Name of the configuration file.  Required')
@@ -96,7 +96,7 @@ package_objects = {}
 for pname in package_names:
     if not pname: continue
 
-    exec ("from ext.wrapper import %s" % pname)
+    exec ("from metascons.wrapper import %s" % pname)
     pmod = eval(pname)
     pobj = pmod.wrapper
 
@@ -123,10 +123,10 @@ for pname in package_names:
     pobj.install()
 
     # Set up the inter-package dependencies
-    for dep in pobj.dependencies():
-        other_obj = package_objects[dep]
-        Requires(pobj.destbindir(), other_obj.destbindir())
-        continue
+    # for dep in pobj.dependencies():
+    #     other_obj = package_objects[dep]
+    #     Requires(pobj.destbindir(), other_obj.destbindir())
+    #     continue
 
     continue
 
