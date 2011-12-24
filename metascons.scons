@@ -1,0 +1,132 @@
+#!/usr/bin/env scons # -*- python -*- #
+
+# Explicit dependency:
+# Depends(File('this_is_remade'),File('when_this_changes'))
+
+# Order only:
+# Requires(File('this_is_made'),File('only_after_this_exists'))
+
+import os
+import ConfigParser
+from ext.util import guess_platform
+
+AddOption('--build-config',default=None,
+          help='Name of the configuration file.  Required')
+
+AddOption('--build-area',default=os.environ.get('BUILD_AREA'),
+          help='Location for unpacking and building tarballs')
+
+AddOption('--web-cache-url',default=os.environ.get('WEB_CACHE_URL'),
+          help='URL at which tarballs can be found')
+
+AddOption('--tar-files',default=os.environ.get('TAR_FILES'),
+          help='Local filesystem directory holding tarballs')
+
+AddOption('--install-area',default=os.environ.get('INSTALL_AREA'),
+          help='Base directory holding installed packages')
+
+AddOption('--platform',default=guess_platform(),
+          help='Unique binary platform name')
+
+AddOption('--packages',default=[],action="append")
+
+AddOption('--dbg',default=None,action='store_true',
+          help='Use build with debug strings')
+
+cfg_file = GetOption('build_config')
+assert cfg_file, 'Must specify a build configuration file with --build-config'
+cfg = ConfigParser.SafeConfigParser()
+cfg.read(cfg_file)
+
+def get_option(optname, section = 'DEFAULTS'):
+    try:
+        opt = GetOption(optname)
+    except AttributeError,msg:
+        pass
+    else:
+        if opt: return opt
+
+    try:
+        opt = cfg.get(section,optname)
+    except ConfigParser.NoOptionError,msg:
+        return None
+    return opt
+
+
+platform = get_option('platform')
+if get_option('dbg'): platform += '-dbg'
+print platform
+
+env = DefaultEnvironment(BUILD_AREA = get_option('build_area'),
+                         WEB_CACHE_URL = get_option('web_cache_url'),
+                         TAR_FILES = get_option('tar_files'),
+                         INSTALL_AREA = get_option('install_area'),
+                         PLATFORM = platform)
+                             
+def resolve_packages():
+    pkgs = get_option('packages')
+    if type(pkgs) == list:
+        pkgs = ' '.join(pkgs)
+    return pkgs.split(' ')
+
+package_names = resolve_packages()
+assert package_names, 'No packages specified, use "packages" option'
+
+def package_env(pobj):
+    '''
+    Produce a package-specific environment based on the default
+    '''
+    pobj.set_env(env)
+
+    name = pobj.name()
+    NAME = name.upper()
+
+    version = get_option(name,'versions')
+    env[NAME + '_VERSION'] = version
+    meths = ['version','sourcedir','tarball','tarballurl','destbindir']
+    for meth in meths:
+        VAR = NAME + '_' + meth.upper()
+        meth = eval('pobj.%s'%meth)
+        env[VAR] = meth()
+        continue
+    return
+
+
+package_objects = {}
+for pname in package_names:
+    if not pname: continue
+
+    exec ("from ext.wrapper import %s" % pname)
+    pmod = eval(pname)
+    pobj = pmod.wrapper
+
+    package_objects[pname] = pobj
+    package_env(pobj)
+
+    deps = pobj.dependencies()
+    for dep in deps:
+        if dep not in package_names:
+            package_names.append(dep)
+            pass
+        continue
+    continue
+
+for pname in package_names:
+    print 'Setting up %s' % pname
+
+    pobj = package_objects[pname]
+
+    pobj.get()
+    pobj.unpack()
+    pobj.configure()
+    pobj.make()
+    pobj.install()
+
+    # Set up the inter-package dependencies
+    for dep in pobj.dependencies():
+        other_obj = package_objects[dep]
+        Requires(pobj.destbindir(), other_obj.destbindir())
+        continue
+
+    continue
+
