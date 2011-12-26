@@ -1,4 +1,22 @@
 #!/usr/bin/env scons # -*- python -*- #
+'''
+This is the metascons SConstuct file to drive builds of suitably
+wrapped packages.
+
+See metascons.default for how to write a wrapper module.
+
+The build is driven by a required configuration file.  See
+cfg/example.cfg for an example.  In addition, some options can be
+specified as command-line parameters or as environment variables.  The
+order of precidence is:
+
+* command line
+* configuration file
+* environment variables.
+
+'''
+
+
 
 # Explicit dependency:
 # Depends(File('this_is_remade'),File('when_this_changes'))
@@ -13,16 +31,16 @@ from metascons.util import guess_platform
 AddOption('--build-config',default=None,
           help='Name of the configuration file.  Required')
 
-AddOption('--build-area',default=os.environ.get('BUILD_AREA'),
+AddOption('--build-area',default=None,
           help='Location for unpacking and building tarballs')
 
-AddOption('--web-cache-url',default=os.environ.get('WEB_CACHE_URL'),
+AddOption('--web-cache-url',default=None,
           help='URL at which tarballs can be found')
 
-AddOption('--tar-files',default=os.environ.get('TAR_FILES'),
+AddOption('--tar-files',default=None,
           help='Local filesystem directory holding tarballs')
 
-AddOption('--install-area',default=os.environ.get('INSTALL_AREA'),
+AddOption('--install-area',default=None,
           help='Base directory holding installed packages')
 
 AddOption('--platform',default=guess_platform(),
@@ -47,10 +65,13 @@ def get_option(optname, section = 'DEFAULTS'):
         if opt: return opt
 
     try:
-        opt = cfg.get(section,optname)
+        opt = cfg.get(section,optname,0,{'pwd':os.getcwd()})
     except ConfigParser.NoOptionError,msg:
-        return None
-    return opt
+        pass
+    else:
+        if opt: return opt
+    
+    return os.environ.get(optname.upper())
 
 
 platform = get_option('platform')
@@ -62,7 +83,7 @@ env = DefaultEnvironment(BUILD_AREA = get_option('build_area'),
                          TAR_FILES = get_option('tar_files'),
                          INSTALL_AREA = get_option('install_area'),
                          PLATFORM = platform)
-                             
+
 def resolve_packages():
     pkgs = get_option('packages')
     if type(pkgs) == list:
@@ -74,20 +95,37 @@ assert package_names, 'No packages specified, use "packages" option'
 
 def package_env(pobj):
     '''
-    Produce a package-specific environment based on the default
+    Set up a package module's environment.
     '''
     pobj.set_env(env)
 
     name = pobj.name()
+    print 'Package env for %s (%s)' % (name,pobj)
+
     NAME = name.upper()
 
     version = get_option(name,'versions')
     env[NAME + '_VERSION'] = version
-    meths = ['version','sourcedir','tarball','tarballurl','destbindir']
-    for meth in meths:
-        VAR = NAME + '_' + meth.upper()
-        meth = eval('pobj.%s'%meth)
-        env[VAR] = meth()
+    print '%s %s' % (NAME,version)
+
+    meths = [
+        'dependencies',
+        'version',
+        'tarballname',
+        'tarballurl',
+        'tarballpath',
+        'sourcedir',
+        'installdir',
+        ]
+
+    for methname in meths:
+        meth = eval("pobj.%s" % methname)
+        val = meth()
+        print methname,val
+        if val is None: continue
+        VAR = NAME + '_' + methname.upper()
+        env[VAR] = val
+        print '%s --> %s' % (VAR,val)
         continue
     return
 
@@ -111,22 +149,44 @@ for pname in package_names:
         continue
     continue
 
+def get_stage_item(pobj,stage,what):
+    meth = eval("pobj.%s_%s" % (stage,what))
+    return meth()
+
 for pname in package_names:
     print 'Setting up %s' % pname
 
     pobj = package_objects[pname]
 
-    pobj.get()
-    pobj.unpack()
-    pobj.configure()
-    pobj.make()
-    pobj.install()
+    stages = [
+        'download',
+        'unpack',
+        'prepare',
+        'build',
+        'install',
+        ]
+
+    lasttarget = cfg_file
+    laststage = None
+    for stage in stages:
+        target = get_stage_item(pobj,stage,'target')
+        action = get_stage_item(pobj,stage,'action')
+
+        # print
+        # print stage.upper()        
+        # print '%s --> %s' % (lasttarget,target)
+        # print action
+
+        env.Command(target,lasttarget,action)
+        laststage = stage
+        lasttarget = get_stage_item(pobj,laststage,'target')
+        continue
 
     # Set up the inter-package dependencies
-    # for dep in pobj.dependencies():
-    #     other_obj = package_objects[dep]
-    #     Requires(pobj.destbindir(), other_obj.destbindir())
-    #     continue
+    for dep in pobj.dependencies():
+        other_mod = package_objects[dep]
+        Requires(pobj.install_target(), other_mod.instal_target())
+        continue
 
     continue
 

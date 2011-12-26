@@ -4,7 +4,7 @@ MetaSCons
 This project uses SCons to build other "external" packages.  It uses
 scons to work out the dependencies.  The basic idea is that all
 supported packages have a ``metascons.wrapper.Package`` which defines
-a ``metascons.wrapper.Wrapper`` class that takes care of what is
+a ``metascons.wrapper.MetaSconsWrapper`` class that takes care of what is
 needed to 
 
 * download,
@@ -12,10 +12,11 @@ needed to
 * make and
 * install the package
 
-The base class provides some default methods assuming the package is
-actually built by autoconf.
+The base class provides some default methods some of which are general
+and some are merely place holders.
 
-This class also declares any dependencies on other external packages.
+The wrapper class also declares any dependencies on other external
+packages.
 
 The final result is an installation area layed out like:
 
@@ -29,10 +30,13 @@ Configuration
 A INI-style configuration file is used.  And example is in
 cfg/example.cfg which builds some tiny test packages (which happen to
 use SCons themselves).  The test requires the ``webcache/`` directory
-to be available on the web somewhere.
+to be available on the web somewhere unless individual wrappers define
+a specific URL.
 
 Configuration items in the DEFAULTS section can also be specified on
-the command line.
+the command line or environment.
+
+Paths are expected to be absolute.
 
 Running
 =======

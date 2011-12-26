@@ -1,44 +1,38 @@
 #!/usr/bin/env python
 '''
-A wrapper package for the 'later' package
+A metascons wrapper module for the GNU hello package
 '''
 
 import os
-from metascons.wrapper import Wrapper
+from metascons.wrapper import MetaSconsWrapper
 
-class Hello(Wrapper):
-    '''
-    Record non standard info for the "Hello" package
-    '''
+class HelloWrapper(MetaSconsWrapper):
+
+    def tarballurl(self):
+        urlpatt = 'http://ftp.gnu.org/gnu/hello/hello-%s.tar.gz'
+        return urlpatt % self.env['HELLO_VERSION']
+
+
+    def prepare_target(self):
+        return os.path.join(self.sourcedir(), 'config.status')
+
+    def prepare_action(self):
+        return 'cd %s && ./configure' % self.sourcedir()
+
+    def build_target(self):
+        return os.path.join(self.sourcedir(), 'src/hello')
+
+    def build_action(self):
+        return "cd %s && make" % self.sourcedir()
 
     def install_target(self):
-        return os.path.join(self.destbindir(),'bin',self.name())
+        return os.path.join(self.installdir(),'bin/hello')
 
-    def make_target(self):
-        dbgopt = 'opt'
-        if '-dbg' == self.env('PLATFORM')[-4:]:
-            dbgopt = 'dbg'
-        return os.path.join(self.sourcedir(),dbgopt,self.name())
-
-
-    def configure(self):
-        self._env.Command(self.config_target(),self.unpack_target(),
-                          'date > $TARGET')
-        return
-
-    def make(self):
-        self._env.Command(self.make_target(),self.config_target(),
-                          'cd %s ; scons' % self.sourcedir())
-        return
-
-    def install(self):
-        self._env.Install(os.path.join(self.destbindir(),'bin'),
-                          self.make_target())
-        return
-
+    def install_action(self):
+        return "cd $HELLO_SOURCEDIR && make prefix=$HELLO_INSTALLDIR install"
     pass
 
-wrapper = Hello()
+wrapper = HelloWrapper()
 
-    
+
 
