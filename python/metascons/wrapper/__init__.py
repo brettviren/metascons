@@ -127,13 +127,18 @@ actions will produce a target file by storing the output of the
 ``date`` command into a text file named after the stage (as a
 past-tense verb).  This will allow proper build and re-build ordering.
 
-A note on the .env variable:
-----------------------------
+Environment
+-----------
 
 Every instance will be given a .env variable holding a SCons
 Environment object and it will contain environment variables that
 reference the build environment including what is needed to build/run
 against other packages on which this one depends.
+
+In addition, each class must implement an environment() method that
+returns a dictionary containing environment variables to add to a more
+full environment.  PATH-like values should stored as lists.
+
 '''
 
 import os
@@ -217,6 +222,13 @@ class MetaSconsWrapper(object):
         return os.path.join(self.env['INSTALL_AREA'], self.name(),
                             self.version(), self.env['PLATFORM'])
 
+    def environment(self):
+        '''
+        Return a dictionary of environment variables needed to use the
+        installed package.
+        '''
+        return {}
+
 
     ## targets: ##
 
@@ -258,6 +270,13 @@ class MetaSconsWrapper(object):
         to INSTALLDIR/NAME.installed.
         '''
         return os.path.join(self.installdir(),self.name() + '.installed')
+
+    def environment_target(self):
+        '''
+        Define a file produced during the environment generation
+        stage.  If omitted it will be set to INSTALLDIR/setup-NAME.sh
+        '''
+        return os.path.join(self.installdir(),'setup-' + self.name() + '.sh')
 
 
     ## actions ##
@@ -322,5 +341,57 @@ class MetaSconsWrapper(object):
         the install_target as described above.
         '''
         return "date > $TARGET"
+
+    def do_environment_action(self,target,source,env):
+        '''
+        Generate setup scripts for this package.
+        '''
+
+        bs_name = self.environment_target()
+        cs_name = os.path.splitext(bs_name)[0] + '.csh'
+
+        bs_fp = open(bs_name,'w')
+        cs_fp = open(cs_name,'w')
+
+        head = '#!/bin/%s\n# generated setup script for %s.  Do not edit\n'
+        bs_fp.write(head % ('sh',self.name()))
+        cs_fp.write(head % ('csh',self.name()))
+
+        for depobj in self.depobjs:
+            other_bs_name = depobj.environment_target()
+            other_cs_name = os.path.splitext(other_bs_name)[0] + '.csh'
+
+            line = 'source %s\n'
+            bs_fp.write(line % other_bs_name)
+            cs_fp.write(line % other_cs_name)
+
+            continue
+
+        for key,val in self.environment().iteritems():
+            if isinstance(val,list):
+                val = ':'.join(val)
+                # prepend to existing var
+                bs_fp.write('export %s=%s${%s:+:$%s}\n' % (key,val,key,key))
+                cs_fp.write('''
+if ( $?%(key)s == 1 ) then
+  setenv %(key)s %(val)s:${%(key)s}
+else
+  setenv %(key)s %(val)s
+endif
+''' % { 'key':key, 'val':val })
+                continue
+            bs_fp.write('export %s="%s"\n' % (key,val))
+            cs_fp.write('setenv %s "%s"\n' % (key,val))
+            continue
+
+        return
+
+    def environment_action(self):
+        '''
+        Provide the environment setup script generation action.  The
+        default is to examine the INSTALLDIR.
+        '''
+        return self.do_environment_action
+
 
     pass

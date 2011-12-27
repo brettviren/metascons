@@ -15,6 +15,7 @@ def guess_platform():
 
     return '-'.join(plat)
 
+
 if '__main__' == __name__:
     print guess_platform()
 

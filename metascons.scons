@@ -83,6 +83,7 @@ env = DefaultEnvironment(BUILD_AREA = get_option('build_area'),
                          TAR_FILES = get_option('tar_files'),
                          INSTALL_AREA = get_option('install_area'),
                          PLATFORM = platform)
+env['ENV']['PATH'] = env['ENV']['PATH'].split(':')
 
 def resolve_packages():
     pkgs = get_option('packages')
@@ -97,7 +98,8 @@ def package_env(pobj):
     '''
     Set up a package module's environment.
     '''
-    pobj.set_env(env)
+    pkg_env = env.Clone()
+    pobj.set_env(pkg_env)
 
     name = pobj.name()
     print 'Package env for %s (%s)' % (name,pobj)
@@ -105,7 +107,7 @@ def package_env(pobj):
     NAME = name.upper()
 
     version = get_option(name,'versions')
-    env[NAME + '_VERSION'] = version
+    pkg_env[NAME + '_VERSION'] = version
     print '%s %s' % (NAME,version)
 
     meths = [
@@ -124,7 +126,7 @@ def package_env(pobj):
         print methname,val
         if val is None: continue
         VAR = NAME + '_' + methname.upper()
-        env[VAR] = val
+        pkg_env[VAR] = val
         print '%s --> %s' % (VAR,val)
         continue
     return
@@ -164,6 +166,7 @@ for pname in package_names:
         'prepare',
         'build',
         'install',
+        'environment',
         ]
 
     lasttarget = cfg_file
@@ -177,16 +180,18 @@ for pname in package_names:
         # print '%s --> %s' % (lasttarget,target)
         # print action
 
-        env.Command(target,lasttarget,action)
+        pobj.env.Command(target,lasttarget,action)
         laststage = stage
         lasttarget = get_stage_item(pobj,laststage,'target')
         continue
 
     # Set up the inter-package dependencies
+    pobj.depobjs = []
     for dep in pobj.dependencies():
-        other_mod = package_objects[dep]
-        Requires(pobj.install_target(), other_mod.instal_target())
+        other_obj = package_objects[dep]
+        Requires(pobj.install_target(), other_obj.instal_target())
+        pobj.depobjs.append(other_obj)
         continue
-
     continue
 
+print '\nstarting build\n'
