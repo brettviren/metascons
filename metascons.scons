@@ -26,7 +26,7 @@ order of precidence is:
 
 import os
 import ConfigParser
-from metascons.util import guess_platform
+from metascons.util import guess_platform, fix_env
 
 AddOption('--build-config',default=None,
           help='Name of the configuration file.  Required')
@@ -83,7 +83,7 @@ env = DefaultEnvironment(BUILD_AREA = get_option('build_area'),
                          TAR_FILES = get_option('tar_files'),
                          INSTALL_AREA = get_option('install_area'),
                          PLATFORM = platform)
-env['ENV']['PATH'] = env['ENV']['PATH'].split(':')
+fix_env(env)
 
 def resolve_packages():
     pkgs = get_option('packages')
