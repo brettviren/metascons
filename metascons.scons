@@ -43,6 +43,9 @@ AddOption('--packages',default=[],action="append")
 AddOption('--dbg',default=None,action='store_true',
           help='Use build with debug strings')
 
+AddOption('--environment-file',default=None,
+          help='Indicate a file to which the run-time environment dictionary is written')
+
 class MetaSCons(object):
     def __init__(self):
         self.cfg_file = GetOption('build_config')
@@ -199,6 +202,21 @@ class MetaSCons(object):
             print '%s --> %s' % (VAR,val)
             continue
         return
+
+    def dump_environment(self):
+        envdump = self.get_option('environment_file')
+        if not envdump: return
+
+
+        envout = {}
+        for pname in self.package_names:
+            pobj = self.package_objects[pname]
+            merge_dict(envout,pobj.environment())
+            continue
+        fp = open(envdump,'w')
+        fp.write(str(envout))
+        fp.close()
+
     pass
 
 
@@ -207,4 +225,5 @@ class MetaSCons(object):
 msc = MetaSCons()
 msc.resolve_package_objects()
 msc.resolve_dependencies()
+msc.dump_environment()
 print '\nstarting build\n'

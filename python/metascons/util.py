@@ -40,6 +40,48 @@ def fix_env(env):
         continue
     return env
 
+def merge_dict(dst,src):
+    for key,val in src.iteritems():
+        
+        if key == 'ENV':
+            merge_dict(dst['ENV'],src['ENV'])
+            pass
+        
+        if not dst.has_key(key):
+            dst[key] = val
+            continue
+        
+        if len(key) < 4 or key[-4:] != 'PATH':
+            continue        # keep d's variable value
+        
+        # prepend, respecting if is string or list
+        stringify = False
+        lhs = dst[key]
+        if type(lhs) == str:
+            stringify = True
+            lhs = lhs.split(':')
+            pass
+        if type(val) == str:
+            val = val.split(':')
+            pass
+
+        toadd = []
+        for thing in val:
+            toadd.append(thing)
+            if thing in lhs:
+                lhs.remove(thing)
+                pass
+            continue
+        lhs = toadd + lhs
+
+        if stringify:
+            lhs = ':'.join(lhs)
+            pass
+
+        dst[key] = lhs
+        continue
+    return
+
 def merge_env(dst,src):
     '''
     Merge the src construction environment into the dst.  This merges
@@ -50,48 +92,7 @@ def merge_env(dst,src):
 
     For all others dst retains its variables' values and only
     variables in src that are not in dst are copied over.
-    '''
-
-    def merge_dict(d,s):
-        for key,val in s.iteritems():
-
-            if key == 'ENV':
-                merge_dict(d['ENV'],s['ENV'])
-
-            if not d.has_key(key):
-                d[key] = val
-                continue
-
-            if len(key) < 4 or key[-4:] != 'PATH':
-                continue        # keep d's variable value
-
-            # prepend, respecting if is string or list
-            stringify = False
-            lhs = d[key]
-            if type(lhs) == str:
-                stringify = True
-                lhs = lhs.split(':')
-                pass
-            if type(val) == str:
-                val = val.split(':')
-                pass
-
-            toadd = []
-            for thing in val:
-                toadd.append(thing)
-                if thing in lhs:
-                    lhs.remove(thing)
-                    pass
-                continue
-            lhs = toadd + lhs
-
-            if stringify:
-                lhs = ':'.join(lhs)
-
-            d[key] = lhs
-            continue
-        return
-            
+    '''            
     merge_dict(dst.Dictionary(), src.Dictionary())
     return
 
