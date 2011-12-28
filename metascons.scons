@@ -16,17 +16,9 @@ order of precidence is:
 
 '''
 
-
-
-# Explicit dependency:
-# Depends(File('this_is_remade'),File('when_this_changes'))
-
-# Order only:
-# Requires(File('this_is_made'),File('only_after_this_exists'))
-
 import os
 import ConfigParser
-from metascons.util import guess_platform, fix_env
+from metascons.util import *
 
 AddOption('--build-config',default=None,
           help='Name of the configuration file.  Required')
@@ -51,147 +43,168 @@ AddOption('--packages',default=[],action="append")
 AddOption('--dbg',default=None,action='store_true',
           help='Use build with debug strings')
 
-cfg_file = GetOption('build_config')
-assert cfg_file, 'Must specify a build configuration file with --build-config'
-cfg = ConfigParser.SafeConfigParser()
-cfg.read(cfg_file)
+class MetaSCons(object):
+    def __init__(self):
+        self.cfg_file = GetOption('build_config')
+        assert self.cfg_file,\
+            'Must specify a build configuration file with --build-config'
+        self.cfg = ConfigParser.SafeConfigParser()
+        self.cfg.read(self.cfg_file)
 
-def get_option(optname, section = 'DEFAULTS'):
-    try:
-        opt = GetOption(optname)
-    except AttributeError,msg:
-        pass
-    else:
-        if opt: return opt
+        platform = self.get_option('platform')
+        if self.get_option('dbg'): platform += '-dbg'
+        print platform
 
-    try:
-        opt = cfg.get(section,optname,0,{'pwd':os.getcwd()})
-    except ConfigParser.NoOptionError,msg:
-        pass
-    else:
-        if opt: return opt
-    
-    return os.environ.get(optname.upper())
+        self.env = DefaultEnvironment(
+            BUILD_AREA = self.get_option('build_area'),
+            WEB_CACHE_URL = self.get_option('web_cache_url'),
+            TAR_FILES = self.get_option('tar_files'),
+            INSTALL_AREA = self.get_option('install_area'),
+            PLATFORM = platform)
+        fix_env(self.env)
 
+        self.package_names = resolve_packages(self.get_option('packages'))
+        assert self.package_names, \
+            'No packages specified, use "packages" option'
 
-platform = get_option('platform')
-if get_option('dbg'): platform += '-dbg'
-print platform
+        return
 
-env = DefaultEnvironment(BUILD_AREA = get_option('build_area'),
-                         WEB_CACHE_URL = get_option('web_cache_url'),
-                         TAR_FILES = get_option('tar_files'),
-                         INSTALL_AREA = get_option('install_area'),
-                         PLATFORM = platform)
-fix_env(env)
+    def resolve_package_objects(self):
+        self.package_objects = {}
+        for pname in self.package_names:
+            if not pname: continue
 
-def resolve_packages():
-    pkgs = get_option('packages')
-    if type(pkgs) == list:
-        pkgs = ' '.join(pkgs)
-    return pkgs.split(' ')
+            exec ("from metascons.wrapper import %s" % pname)
+            pmod = eval(pname)
+            pobj = pmod.wrapper
 
-package_names = resolve_packages()
-assert package_names, 'No packages specified, use "packages" option'
+            self.package_objects[pname] = pobj
+            self.package_env(pobj)
 
-def package_env(pobj):
-    '''
-    Set up a package module's environment.
-    '''
-    pkg_env = env.Clone()
-    pobj.set_env(pkg_env)
+            deps = pobj.dependencies()
+            for dep in deps:
+                if dep not in self.package_names:
+                    self.package_names.append(dep)
+                    pass
+                continue
+            continue
+        return
 
-    name = pobj.name()
-    print 'Package env for %s (%s)' % (name,pobj)
+    def resolve_dependencies(self):
 
-    NAME = name.upper()
+        for pname in self.package_names:
 
-    version = get_option(name,'versions')
-    pkg_env[NAME + '_VERSION'] = version
-    print '%s %s' % (NAME,version)
+            print 'Setting up %s' % pname
 
-    meths = [
-        'dependencies',
-        'version',
-        'tarballname',
-        'tarballurl',
-        'tarballpath',
-        'sourcedir',
-        'installdir',
-        ]
+            pobj = self.package_objects[pname]
 
-    for methname in meths:
-        meth = eval("pobj.%s" % methname)
-        val = meth()
-        print methname,val
-        if val is None: continue
-        VAR = NAME + '_' + methname.upper()
-        pkg_env[VAR] = val
-        print '%s --> %s' % (VAR,val)
-        continue
-    return
+            stages = [
+                'download',
+                'unpack',
+                'prepare',
+                'build',
+                'install',
+                'environment',
+                ]
 
+            # lil helper
+            def get_stage_item(pobj,stage,what):
+                meth = eval("pobj.%s_%s" % (stage,what))
+                return meth()
 
-package_objects = {}
-for pname in package_names:
-    if not pname: continue
+            lasttarget = self.cfg_file # bad idea?
+            laststage = None
+            for stage in stages:
+                target = get_stage_item(pobj,stage,'target')
+                action = get_stage_item(pobj,stage,'action')
+                
+                # print
+                # print stage.upper()        
+                # print '%s --> %s' % (lasttarget,target)
+                # print action
+                
+                pobj.env.Command(target,lasttarget,action)
+                laststage = stage
+                lasttarget = get_stage_item(pobj,laststage,'target')
+                continue
 
-    exec ("from metascons.wrapper import %s" % pname)
-    pmod = eval(pname)
-    pobj = pmod.wrapper
+            # Set up the inter-package dependencies
+            pobj.depobjs = []
+            for dep in pobj.dependencies():
+                other_obj = package_objects[dep]
+                Requires(pobj.environment_target(), other_obj.environment_target())
+                merge_env(pobj.env,other_obj.env)
+                pobj.depobjs.append(other_obj)
+                continue
+            continue
+        
+        # Get the run-time environments
+        for pname in self.package_names:
+            pobj = self.package_objects[pname]
+            recursive_merge_env(pobj)
+            continue
 
-    package_objects[pname] = pobj
-    package_env(pobj)
+        return
 
-    deps = pobj.dependencies()
-    for dep in deps:
-        if dep not in package_names:
-            package_names.append(dep)
+    def get_option(self,optname, section = 'DEFAULTS'):
+        try:
+            opt = GetOption(optname)
+        except AttributeError,msg:
             pass
-        continue
-    continue
+        else:
+            if opt: return opt
 
-def get_stage_item(pobj,stage,what):
-    meth = eval("pobj.%s_%s" % (stage,what))
-    return meth()
+        try:
+            opt = self.cfg.get(section,optname,0,{'pwd':os.getcwd()})
+        except ConfigParser.NoOptionError,msg:
+            pass
+        else:
+            if opt: return opt
+            
+        return os.environ.get(optname.upper())
 
-for pname in package_names:
-    print 'Setting up %s' % pname
+    def package_env(self,pobj):
+        '''
+        Set up a package module's environment.
+        '''
+        pkg_env = self.env.Clone()
+        pobj.set_env(pkg_env)
 
-    pobj = package_objects[pname]
+        name = pobj.name()
+        print 'Package env for %s (%s)' % (name,pobj)
 
-    stages = [
-        'download',
-        'unpack',
-        'prepare',
-        'build',
-        'install',
-        'environment',
-        ]
+        NAME = name.upper()
 
-    lasttarget = cfg_file
-    laststage = None
-    for stage in stages:
-        target = get_stage_item(pobj,stage,'target')
-        action = get_stage_item(pobj,stage,'action')
+        version = self.get_option(name,'versions')
+        pkg_env[NAME + '_VERSION'] = version
+        print '%s %s' % (NAME,version)
 
-        # print
-        # print stage.upper()        
-        # print '%s --> %s' % (lasttarget,target)
-        # print action
+        meths = [
+            'dependencies',
+            'version',
+            'tarballname',
+            'tarballurl',
+            'tarballpath',
+            'sourcedir',
+            'installdir',
+            ]
 
-        pobj.env.Command(target,lasttarget,action)
-        laststage = stage
-        lasttarget = get_stage_item(pobj,laststage,'target')
-        continue
+        for methname in meths:
+            meth = eval("pobj.%s" % methname)
+            val = meth()
+            print methname,val
+            if val is None: continue
+            VAR = NAME + '_' + methname.upper()
+            pkg_env[VAR] = val
+            print '%s --> %s' % (VAR,val)
+            continue
+        return
+    pass
 
-    # Set up the inter-package dependencies
-    pobj.depobjs = []
-    for dep in pobj.dependencies():
-        other_obj = package_objects[dep]
-        Requires(pobj.install_target(), other_obj.instal_target())
-        pobj.depobjs.append(other_obj)
-        continue
-    continue
 
+
+
+msc = MetaSCons()
+msc.resolve_package_objects()
+msc.resolve_dependencies()
 print '\nstarting build\n'
