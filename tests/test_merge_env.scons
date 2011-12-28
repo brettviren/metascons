@@ -1,0 +1,29 @@
+#!/usr/bin/env scons # -*- python -*- #
+
+from metascons.util import merge_env
+
+env1 = Environment()
+env2 = Environment()
+
+env1['MYPATH'] = ['/path/to/a','/path/to/b','/path/to/z']
+env2['MYPATH'] = ['/path/to/x','/path/to/y','/path/to/z']
+env1['ANSWER'] = '42'
+env2['ANSWER'] = '69'
+# env1 has now NEWVAR
+env2['NEWVAR'] = 'better-than-old-var'
+
+env1['ENV'] = { 'PATH':'/bin:/usr/bin:/usr/local/bin',
+                'FOO':'bar',
+                }
+env2['ENV'] = { 'PATH':'/opt/bin:/etc/bin:/home/user/bin',
+                'FOO':'figher',
+                'BAZ':'quax'
+                }
+
+merge_env(env1,env2)
+merge_env(env1,env2)
+
+for var in ['MYPATH','ANSWER','NEWVAR','ENV']:
+    print 'env1["%s"] = "%s"' % (var,env1[var])
+    print 'env2["%s"] = "%s"' % (var,env2[var])
+

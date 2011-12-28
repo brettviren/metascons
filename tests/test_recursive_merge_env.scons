@@ -1,0 +1,58 @@
+#!/usr/bin/env scons # -*- python -*- #
+
+from metascons.util import recursive_merge_env
+
+env1 = Environment()
+env2 = Environment()
+env3 = Environment()
+
+env1['MYPATH'] = ['/path/to/a','/path/to/b','/path/to/z']
+env1['ANSWER'] = '42'
+env1['ENV'] = { 'PATH':'/bin:/usr/bin:/usr/local/bin',
+                'FOO':'bar',
+                }
+
+env2['MYPATH'] = ['/path/to/x','/path/to/y','/path/to/z']
+env2['ANSWER'] = '69'
+env2['NEWVAR'] = 'better-than-old-var'
+env2['ENV'] = { 'PATH':'/opt/bin:/etc/bin:/home/user/bin',
+                'FOO':'figher',
+                'BAZ':'quax'
+                }
+
+env3['MYPATH'] = ['/path/to/tree','/path/to/dog','/path/to/whistle']
+env3['ANSWER'] = '96'
+env3['NEWERVAR'] = 'even-better-than-old-var'
+env3['ENV'] = { 'PATH':'/mnt/opt/bin:/mnt/etc/bin:/mnt/home/user/bin',
+                'FOO':'foo-foo-dog',
+                'BOING':'boing'
+                }
+
+class Package: pass
+    
+
+pobj1 = Package()
+pobj1.env = env1
+pobj2 = Package()
+pobj2.env = env2
+pobj3 = Package()
+pobj3.env = env3
+pobj1.depobjs = [pobj2]
+pobj2.depobjs = [pobj3]
+pobj3.depobjs = []
+
+recursive_merge_env(pobj1)
+
+for number, pobj in enumerate([pobj1,pobj2,pobj3]):
+    number += 1
+    print 'Object #%d' % number
+    env = pobj.env
+    for var in ['MYPATH','ANSWER','NEWVAR','NEWERVAR','ENV']:
+        try:
+            val = env[var]
+        except KeyError:
+            print 'env["%s"] does not exist' % var
+            continue
+        print 'env["%s"] = "%s"' % (var,val)
+        continue
+    print
