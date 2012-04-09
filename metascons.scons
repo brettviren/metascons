@@ -134,7 +134,7 @@ class MetaSCons(object):
             # Set up the inter-package dependencies
             pobj.depobjs = []
             for dep in pobj.dependencies():
-                other_obj = package_objects[dep]
+                other_obj = self.package_objects[dep]
                 Requires(pobj.environment_target(), other_obj.environment_target())
                 merge_env(pobj.env,other_obj.env)
                 pobj.depobjs.append(other_obj)

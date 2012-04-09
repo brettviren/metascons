@@ -46,9 +46,17 @@ To run the example::
   scons -f metascons.scons --build-config=cfg/example.cfg 
 
 
+Writing Wrappers
+================
+
+To write a wrapper that drives building a package one provides a
+Python module that follows a few conventions.  See the docinfo from
+the metascons.wrapper class.
+
 To Do
 =====
 
+* Fix dependency resolution failure problem.  
 * Add shell setup code emission so users can have ``PATH``,
   ``LD_LIBRARY_PATH``, etc, setup to point into ``install_area``.
 
