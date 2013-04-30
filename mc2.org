@@ -1,0 +1,168 @@
+metascons - use scons to build suites of software packages
+
+* Package hell
+
+Software packages suck.
+
+ - there are all sorts of ways to build them
+
+ - building a package takes numerous steps
+
+ - the source needs to get downloaded from all over the place
+
+ - the source is archived in all sorts of formats
+
+ - they use all manner of version strings, if they use any or any at
+   all.  Sometimes more than one pattern is used for the same version
+   of a package.  For any given package, version strings are not
+   guaranteed to sort in lexicographical order.
+
+ - the mapping of name and version string to URL and archive file is
+   different between packages and can change for any give package over
+   time.
+
+ - packages depend on other packages, these dependencies can be
+   sensitive to version, new dependencies show up, old ones drop off
+
+ - often people need to have multiple versions of a package installed.
+
+ - they need modify existing environment variables and must add their own
+
+ - at the end of the day the user needs to efficiently set up this environment
+
+* Package installation deconstructed
+
+A distinction is made in terminology:
+
+ - package source :: the collection of all source files for a package
+
+ - package instance :: the final state of an installed package
+
+ - package installation :: the procedure to produce an instance from a source
+
+Package installation is modeled as a directed graph.  Each node
+represents a state of (a portion of) the file system.  Nodes in this
+graph are joined by directional edges that represent the action
+required to produce the new state.  
+
+An action is identified by a name, an associated package name and an
+optional version constraint which specifies to which versions of the
+associated source package it may be applied.  A package installation
+is then the sum of all associated actions with version constraints
+consistent with a given source version.
+
+As a practical matter, each state has a single representative file,
+the existence of which stands in for the state's existence as a whole.
+In addition, the scope of actions are chosen to encourage reuse.
+Finally, if an action fails, the state of the file system may be left
+undefined.
+
+* Package dependencies
+
+A package installation may depend on other packages by name and
+optionally by a version constraint.  These constraints are defined
+with local package knowledge and may not constrain dependencies to a
+specific version.
+
+* Package suites
+
+Package suites are top down dictates regarding a set of packages which
+must work as a cohesive whole.  For each package the suite dictates a
+specific version.  A package suite may assert a set of tags which
+actions may interpret The package suite is also responsible for
+assigning file system policy.  This policy typically should reflect
+the asserted tags.
+
+In determining file system policy the suite associates an input
+directory and an output directory to every action that make up each of
+the suite's package installation.  These directories may be the same
+or the may be distinct.  Coordination with the intention of an action
+is required in writing this aspect of the suite.  The representative
+state file is expressed as a path relative to the output directory.
+An output directory of one action may, but need not, be the input
+directory of a dependent action.
+
+
+* Environment
+
+Package installations may require special environment set up for end
+use.  It may also be required for dependent package installation.
+
+* Implementation
+
+The implementation has several layers.  
+
+ - configuration
+
+ - SCons code
+
+ - SCons driver
+
+** Configuration 
+
+The main interaction with metascons is via configuration files.  These
+files are in standard Python configuration syntax.  They are composed
+of a number of stanzas that begin with a line surrounded by brackets
+(=[]=) holding the stanza name.  Following this is one line for each
+of a number of key/value pairs delimited by an equal sign.  Python
+string interpolation is performed on all stanza names and all values.
+The content and schema of the interpolation dictionary depends on the
+type and instance of the stanza.  Multiple files may be specified and
+are simply concatenated.  No significance is given to ordering of
+stanzas.  There are two types of stanzas, one to express an action and
+one for a suite.
+
+*** Actions
+
+Actions are described by a stanza beginning with the action name,
+followed by the package name.  Any remainder is interpreted as a
+version constraint.  If no constraint is given it is interpreted as
+no constraint.
+
+#+BEGIN_EXAMPLE
+[<action> <package> <optional version constraint>]
+#+END_EXAMPLE
+
+For example:
+
+#+BEGIN_EXAMPLE
+[configure root %(version)s < 6]
+#+END_EXAMPLE 
+
+Certain keys in the payload of an action are expected, others are
+action-specific.  Required keys are:
+
+ - creates :: the representative file, expressed as a path relative to the output directory
+
+
+*** Suite
+
+Suites are described as a special action called =suite= followed by a
+suite name.  Any remaining entries are considered tags and may include
+a tag which serves as a suite version.  These tags are not considered
+constraints as suites dictate precise things.
+
+#+BEGIN_EXAMPLE
+[suite <name> <optional tags>]
+#+END_EXAMPLE
+
+For example:
+
+#+BEGIN_EXAMPLE
+[suite hepsoft debug release1.0]
+#+END_EXAMPLE
+
+
+* Needs and Open Questions
+
+ - how to control file system locations?
+
+ - must be able to (re)exercise individual actions
+
+ - must be able to determine if an individual action can run
+
+ - revert state in case of failure (git controlled build directory?)
+
+ - how does environment fit into graph-model?
+
+ - how is file system layout controlled?
