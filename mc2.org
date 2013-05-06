@@ -30,6 +30,7 @@ Software packages suck.
 
  - at the end of the day the user needs to efficiently set up this environment
 
+
 * Package installation deconstructed
 
 A distinction is made in terminology:
@@ -45,11 +46,16 @@ represents a state of (a portion of) the file system.  Nodes in this
 graph are joined by directional edges that represent the action
 required to produce the new state.  
 
-An action is identified by a name, an associated package name and an
-optional version constraint which specifies to which versions of the
-associated source package it may be applied.  A package installation
-is then the sum of all associated actions with version constraints
-consistent with a given source version.
+An action is identified by a name and takes an action-specific set of
+parameters.  When applied during a package installation these
+parameters set to package-specific values.
+
+For a given package there are a set of such graphs each of which has a
+version constraint specifying which versions of the package it can
+install.
+
+A package installation is then the sum of all associated actions with
+version constraints consistent with a given source version.
 
 As a practical matter, each state has a single representative file,
 the existence of which stands in for the state's existence as a whole.
@@ -57,36 +63,46 @@ In addition, the scope of actions are chosen to encourage reuse.
 Finally, if an action fails, the state of the file system may be left
 undefined.
 
+** Example
+
+ - action :: configure
+   - depends :: =unpack_action=
+   - creates :: =file:config.status=
+   - arguments :: prefix, 
+   - environment :: =CC=, =CFLAGS=
+
 * Package dependencies
 
 A package installation may depend on other packages by name and
 optionally by a version constraint.  These constraints are defined
-with local package knowledge and may not constrain dependencies to a
-specific version.
+with local package knowledge and may not fully constrain dependencies
+to a specific version.  They are checked against the specific versions
+enumerated in the suite (see below).
 
 * Package suites
 
-Package suites are top down dictates regarding a set of packages which
-must work as a cohesive whole.  For each package the suite dictates a
+Package suites are top-down dictates regarding a set of packages which
+must work as a cohesive whole.  For each package, the suite dictates a
 specific version.  A package suite may assert a set of tags which
-actions may interpret The package suite is also responsible for
+actions may interpret.  The package suite is also responsible for
 assigning file system policy.  This policy typically should reflect
 the asserted tags.
 
-In determining file system policy the suite associates an input
+In determining file system policy, the suite associates an input
 directory and an output directory to every action that make up each of
-the suite's package installation.  These directories may be the same
-or the may be distinct.  Coordination with the intention of an action
-is required in writing this aspect of the suite.  The representative
-state file is expressed as a path relative to the output directory.
-An output directory of one action may, but need not, be the input
-directory of a dependent action.
+the suite's package installation.  These two directories may be the
+same or they may be distinct.  Coordination with the intention of an
+action is required in writing this aspect of the suite.  The
+representative state file is expressed as a path relative to the
+output directory.  An output directory of one action may, but need
+not, be the input directory of a dependent action.
 
 
 * Environment
 
 Package installations may require special environment set up for end
 use.  It may also be required for dependent package installation.
+
 
 * Implementation
 
@@ -100,39 +116,65 @@ The implementation has several layers.
 
 ** Configuration 
 
-The main interaction with metascons is via configuration files.  These
-files are in standard Python configuration syntax.  They are composed
+The main interaction with metascons is via configuration files.
+These
+files  are in standard Python configuration syntax.  They are composed
 of a number of stanzas that begin with a line surrounded by brackets
 (=[]=) holding the stanza name.  Following this is one line for each
-of a number of key/value pairs delimited by an equal sign.  Python
-string interpolation is performed on all stanza names and all values.
-The content and schema of the interpolation dictionary depends on the
-type and instance of the stanza.  Multiple files may be specified and
-are simply concatenated.  No significance is given to ordering of
-stanzas.  There are two types of stanzas, one to express an action and
-one for a suite.
+of a number of key/value pairs delimited by an equal sign.  
+# -- not sure about this one yet:
+# Python string interpolation is performed on all values.  The content
+# and schema of the interpolation dictionary depends on the type and
+# instance of the stanza.  
+Multiple files may be specified and are simply concatenated.  No
+significance is given to ordering of stanzas.  There are three types
+of stanzas each are named with an initial keyword, =action=, =package=
+or =suite=, denoting their type.
 
 *** Actions
 
-Actions are described by a stanza beginning with the action name,
-followed by the package name.  Any remainder is interpreted as a
-version constraint.  If no constraint is given it is interpreted as
-no constraint.
+Action stanzas include definitions of the action-specific parameters
+needed to enact their action on a package in addition to some
+parameters required by all actions.  These parameter values can be
+written to include both Python string interpolation markup or shell
+environment style =$= variables.  They will be resolved late, just
+before the action is applied.  See the section on [[Standard Variables]].
 
 #+BEGIN_EXAMPLE
-[<action> <package> <optional version constraint>]
+[action <action>]
 #+END_EXAMPLE
 
 For example:
 
 #+BEGIN_EXAMPLE
-[configure root %(version)s < 6]
+[action configure]
 #+END_EXAMPLE 
 
-Certain keys in the payload of an action are expected, others are
-action-specific.  Required keys are:
+These keys must be supplied by all actions:
 
- - creates :: the representative file, expressed as a path relative to the output directory
+ - creates :: the representative file, expressed as a path relative to
+              the action's output directory
+
+
+
+*** Packages
+
+Package stanzas take names corresponding to the package name and
+version constraint to which they should be applied.
+
+#+BEGIN_EXAMPLE
+[package <package> <version constraint>]
+#+END_EXAMPLE
+
+For example:
+
+#+BEGIN_EXAMPLE
+[package cmake %(version)s >= 2.8.10]
+#+END_EXAMPLE
+
+
+See the section on [[Version Constraints]] for information on how they
+must be specified.
 
 
 *** Suite
@@ -152,6 +194,28 @@ For example:
 [suite hepsoft debug release1.0]
 #+END_EXAMPLE
 
+The payload sets specific keys or keys matching patterns:
+
+ - =tags= :: a space separated list tags
+
+ - =<action>_<package>_output= :: output directory for action applied to package.  Either can be the keyword =default=.  
+
+ - =<action>_<package>_input= :: output directory for action applied to package.  Either can be the keyword =default=.  
+
+
+ - =<anything>= :: any key may be defined and used for later interpolation
+
+ - == ::
+
+
+** Standard Variables
+
+Certain variables are available either for Python string interpolation
+on configuration values or as shell environment style =$= variables.
+
+** Version Constraints
+
+
 
 * Needs and Open Questions
 
@@ -166,3 +230,4 @@ For example:
  - how does environment fit into graph-model?
 
  - how is file system layout controlled?
+

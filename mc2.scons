@@ -1,0 +1,67 @@
+
+
+AddOption('--meta-config',
+          dest='meta_config',
+          default=[],
+          type='string',
+          action='append',
+          metavar='META_CONFIG',
+          help='meta-configuration file')
+AddOption('--suite',
+          dest='suite',
+          type='string',
+          nargs=1,
+          action='store',
+          metavar='SUITE',
+          help='name of suite to build')
+
+
+print ('suite: "%s"' % GetOption('suite'))
+print ('meta config: "%s"' % GetOption('meta_config'))
+
+
+import mc2
+
+# FIXME: don't know what the hell I'm doing when it comes to working directory.
+builders = {
+    'download': Builder(action = mc2.builders.download,
+                        emitter = mc2.emitters.download),
+
+    'unpack' : Builder(generator = mc2.generators.unpack),
+
+    'autoconf' : Builder(generator = mc2.generators.autoconf),
+
+    'make': Builder(generator = mc2.generators.make),
+}
+
+
+
+cfg = mc2.config.read_config(GetOption('meta_config'))
+suite = mc2.config.resolve_suite(cfg,GetOption('suite'))
+
+main_env = Environment(mc_suite_data=suite, BUILDERS=builders)
+
+# Convert pkg configuration and actions into scons
+for pkg, actions in suite:
+    mc_pkg = {'mc_'+k:v for k,v in pkg.items()}
+    pkg_env = main_env.Clone(**mc_pkg)
+    for action in actions:
+        parts = action.split()
+        actname,target,source=parts[:3]
+        for kv in parts[3:]:
+            k,v = kv.split('=')
+            pkg_env[k] = v
+            pkg_env[k.upper()] = v
+        print 'Setting action "%s" for package "%s" (t="%s", s="%s")' % \
+            (actname, pkg['package'], target, source)
+        builders[actname](pkg_env, target, source)
+        
+    
+    
+# dl = Builder(action = download,
+#              emitter = versioner)
+
+# env = Environment(BUILDERS = {'dl' : dl},
+#                   DOWNLOAD_DIR = '.')
+
+# env.dl('hello')

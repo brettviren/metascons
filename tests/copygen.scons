@@ -1,0 +1,21 @@
+
+
+
+def gen_file(target, source, env):
+    name = str(target[0])
+    src = name + '-src'
+    dst = name + '-dst'
+    fp = open(src,'w')
+    fp.write('\n')
+    fp.close()
+    return [dst], [src]
+
+dl = Builder(action = "cp $SOURCE $TARGET",
+             emitter = gen_file)
+
+env = Environment(BUILDERS = {'dl' : dl})
+
+#env.dl('foo')
+env['BUILDERS']['dl'](env, 'foo')
+
+
